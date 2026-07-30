@@ -10,7 +10,7 @@ interface VaultAnalytics {
 	totalTags: number;
 	orphanNotes: { name: string; path: string }[];
 	totalOrphans: number;
-	staleNotes: { name: string; path: string; days: number }[];
+	shortNotes: { name: string; path: string; words: number }[];
 	topLinked: { name: string; path: string; count: number }[];
 }
 
@@ -54,16 +54,15 @@ function getAnalytics(app: App): VaultAnalytics {
 		return resolved + unresolved === 0;
 	});
 
-	const now = Date.now();
-	const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
-	const staleNotes = markdownFiles
-		.filter((f) => now - f.stat.mtime > THIRTY_DAYS)
-		.sort((a, b) => a.stat.mtime - b.stat.mtime)
+	const SHORT_NOTE_BYTES = 300;
+	const shortNotes = markdownFiles
+		.filter((f) => f.stat.size < SHORT_NOTE_BYTES)
+		.sort((a, b) => a.stat.size - b.stat.size)
 		.slice(0, 10)
 		.map((f) => ({
 			name: f.name,
 			path: f.path,
-			days: Math.floor((now - f.stat.mtime) / (24 * 60 * 60 * 1000)),
+			words: Math.round(f.stat.size / 6),
 		}));
 
 	const backlinkCounts: { path: string; count: number }[] = [];
@@ -116,7 +115,7 @@ function getAnalytics(app: App): VaultAnalytics {
 			path: f.path,
 		})),
 		totalOrphans: orphans.length,
-		staleNotes,
+		shortNotes,
 		topLinked,
 	};
 }
@@ -206,12 +205,12 @@ export const ReactView = ({ app }: { app: App }) => {
 					))}
 				</ol>
 			)}
-			<h3>Stale notes</h3>
-			{data.staleNotes.length === 0 ? (
-				<p>No stale notes.</p>
+			<h3>Short notes</h3>
+			{data.shortNotes.length === 0 ? (
+				<p>No short notes.</p>
 			) : (
 				<ol>
-					{data.staleNotes.map((f) => (
+					{data.shortNotes.map((f) => (
 						<li key={f.path}>
 							<a
 								href="#"
@@ -223,7 +222,7 @@ export const ReactView = ({ app }: { app: App }) => {
 								{f.name}
 							</a>
 							{' — '}
-							{f.days}d untouched
+							~{f.words} words
 						</li>
 					))}
 				</ol>
