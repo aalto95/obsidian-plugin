@@ -3,10 +3,9 @@ import {
 	MarkdownView,
 	MarkdownFileInfo,
 	Modal,
-	Notice,
 	Plugin,
 } from 'obsidian';
-import { ExampleView, VIEW_TYPE_EXAMPLE } from './components/ExampleView';
+import { AnalyticsView, VIEW_TYPE_ANALYTICS } from './components/AnalyticsView';
 import {
 	DEFAULT_SETTINGS,
 	HelloWorldSettings,
@@ -22,9 +21,11 @@ export default class HelloWorldPlugin extends Plugin {
 		await this.loadSettings();
 
 		// This creates an icon in the left ribbon.
-		this.addRibbonIcon('dice', 'Sample', (_evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
+		this.addRibbonIcon('dice', 'Open analytics view', (_evt: MouseEvent) => {
+			void this.app.workspace.getLeaf('tab')?.setViewState({
+				type: VIEW_TYPE_ANALYTICS,
+				active: true,
+			});
 		});
 
 		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
@@ -73,11 +74,11 @@ export default class HelloWorldPlugin extends Plugin {
 		});
 
 		this.addCommand({
-			id: 'open-example-view',
-			name: 'Open example view',
+			id: 'open-analytics-view',
+			name: 'Open analytics view',
 			callback: () => {
-				void this.app.workspace.getRightLeaf(false)?.setViewState({
-					type: VIEW_TYPE_EXAMPLE,
+				void this.app.workspace.getLeaf('tab')?.setViewState({
+					type: VIEW_TYPE_ANALYTICS,
 					active: true,
 				});
 			},
@@ -86,22 +87,21 @@ export default class HelloWorldPlugin extends Plugin {
 		// This adds a settings tab so the user can configure various aspects of the plugin
 		this.addSettingTab(new HelloWorldSettingTab(this.app, this));
 
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(activeDocument, 'click', (_evt: MouseEvent) => {
-			new Notice('Click');
-		});
-
 		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
 
 		this.registerView(
-			VIEW_TYPE_EXAMPLE,
-			(leaf) => new ExampleView(leaf),
+			VIEW_TYPE_ANALYTICS,
+			(leaf) => new AnalyticsView(leaf),
 		);
 
-		await this.app.workspace.getRightLeaf(false)?.setViewState({
-			type: VIEW_TYPE_EXAMPLE,
-			active: true,
+		this.app.workspace.onLayoutReady(() => {
+			const existing = this.app.workspace.getLeavesOfType(VIEW_TYPE_ANALYTICS);
+			if (existing.length === 0) {
+				void this.app.workspace.getLeaf('tab')?.setViewState({
+					type: VIEW_TYPE_ANALYTICS,
+					active: true,
+				});
+			}
 		});
 	}
 

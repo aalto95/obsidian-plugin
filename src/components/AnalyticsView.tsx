@@ -3,9 +3,9 @@ import { ItemView, WorkspaceLeaf } from 'obsidian';
 import { Root, createRoot } from 'react-dom/client';
 import { ReactView } from './ReactView';
 
-export const VIEW_TYPE_EXAMPLE = 'example-view';
+export const VIEW_TYPE_ANALYTICS = 'analytics-view';
 
-export class ExampleView extends ItemView {
+export class AnalyticsView extends ItemView {
 	root: Root | null = null;
 
 	constructor(leaf: WorkspaceLeaf) {
@@ -13,18 +13,18 @@ export class ExampleView extends ItemView {
 	}
 
 	getViewType() {
-		return VIEW_TYPE_EXAMPLE;
+		return VIEW_TYPE_ANALYTICS;
 	}
 
 	getDisplayText() {
-		return 'Example view';
+		return 'Analytics view';
 	}
 
 	async onOpen() {
 		this.root = createRoot(this.contentEl);
 		this.root.render(
 			<StrictMode>
-				<ReactView />
+				<ReactView app={this.app} />
 			</StrictMode>,
 		);
 	}
