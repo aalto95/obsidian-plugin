@@ -72,6 +72,17 @@ export default class HelloWorldPlugin extends Plugin {
 			},
 		});
 
+		this.addCommand({
+			id: 'open-example-view',
+			name: 'Open example view',
+			callback: () => {
+				void this.app.workspace.getRightLeaf(false)?.setViewState({
+					type: VIEW_TYPE_EXAMPLE,
+					active: true,
+				});
+			},
+		});
+
 		// This adds a settings tab so the user can configure various aspects of the plugin
 		this.addSettingTab(new HelloWorldSettingTab(this.app, this));
 
