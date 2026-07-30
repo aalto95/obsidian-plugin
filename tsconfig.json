@@ -16,5 +16,5 @@
 		"lib": ["ES2021", "DOM"],
 		"jsx": "react-jsx"
 	},
-	"include": ["src/**/*.ts"]
+	"include": ["src/**/*.ts", "src/**/*.tsx"]
 }

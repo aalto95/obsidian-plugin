@@ -6,6 +6,7 @@ import {
 	Notice,
 	Plugin,
 } from 'obsidian';
+import { ExampleView, VIEW_TYPE_EXAMPLE } from './components/ExampleView';
 import {
 	DEFAULT_SETTINGS,
 	HelloWorldSettings,
@@ -81,6 +82,16 @@ export default class HelloWorldPlugin extends Plugin {
 		});
 
 		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
+
+		this.registerView(
+			VIEW_TYPE_EXAMPLE,
+			(leaf) => new ExampleView(leaf),
+		);
+
+		await this.app.workspace.getRightLeaf(false)?.setViewState({
+			type: VIEW_TYPE_EXAMPLE,
+			active: true,
+		});
 	}
 
 	onunload() {}
