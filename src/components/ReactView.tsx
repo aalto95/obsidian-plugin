@@ -10,14 +10,20 @@ interface VaultAnalytics {
 	totalTags: number;
 	orphanNotes: { name: string; path: string }[];
 	totalOrphans: number;
+	staleNotes: { name: string; path: string; days: number }[];
+	topLinked: { name: string; path: string; count: number }[];
 }
 
 function getAnalytics(app: App): VaultAnalytics {
 	const all = app.vault.getAllLoadedFiles();
-	const files = all.filter((f) => f instanceof TFile);
+	const files = all.filter((f): f is TFile => f instanceof TFile).filter(
+		(f) => !f.path.startsWith('Archives/'),
+	);
 	const folders = all.filter((f) => !(f instanceof TFile));
 
-	const markdownFiles = app.vault.getMarkdownFiles();
+	const markdownFiles = app.vault.getMarkdownFiles().filter(
+		(f) => !f.path.startsWith('Archives/'),
+	);
 	const tagSet = new Set<string>();
 	for (const f of markdownFiles) {
 		const cache = app.metadataCache.getFileCache(f);
@@ -37,15 +43,51 @@ function getAnalytics(app: App): VaultAnalytics {
 
 	const orphans = markdownFiles.filter((f) => {
 		const cache = app.metadataCache as unknown as {
-			getBacklinksForFile(
-				file: TFile,
-			): { resolved: Record<string, unknown>; unresolved: Record<string, unknown> };
+			getBacklinksForFile(file: TFile): {
+				resolved: Record<string, unknown>;
+				unresolved: Record<string, unknown>;
+			};
 		};
 		const backlinks = cache.getBacklinksForFile(f);
 		const resolved = Object.keys(backlinks?.resolved ?? {}).length;
 		const unresolved = Object.keys(backlinks?.unresolved ?? {}).length;
 		return resolved + unresolved === 0;
 	});
+
+	const now = Date.now();
+	const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
+	const staleNotes = markdownFiles
+		.filter((f) => now - f.stat.mtime > THIRTY_DAYS)
+		.sort((a, b) => a.stat.mtime - b.stat.mtime)
+		.slice(0, 10)
+		.map((f) => ({
+			name: f.name,
+			path: f.path,
+			days: Math.floor((now - f.stat.mtime) / (24 * 60 * 60 * 1000)),
+		}));
+
+	const backlinkCounts: { path: string; count: number }[] = [];
+	for (const f of markdownFiles) {
+		const cache = app.metadataCache as unknown as {
+			getBacklinksForFile(file: TFile): {
+				resolved: Record<string, unknown>;
+				unresolved: Record<string, unknown>;
+			};
+		};
+		const bl = cache.getBacklinksForFile(f);
+		const count =
+			Object.keys(bl?.resolved ?? {}).length +
+			Object.keys(bl?.unresolved ?? {}).length;
+		backlinkCounts.push({ path: f.path, count });
+	}
+	const topLinked = backlinkCounts
+		.sort((a, b) => b.count - a.count)
+		.slice(0, 5)
+		.map(({ path, count }) => ({
+			name: path.split('/').pop() ?? path,
+			path,
+			count,
+		}));
 
 	const sorted = [...files].sort((a, b) => b.stat.mtime - a.stat.mtime);
 	const recentFiles = sorted.slice(0, 5).map((f) => ({
@@ -74,6 +116,8 @@ function getAnalytics(app: App): VaultAnalytics {
 			path: f.path,
 		})),
 		totalOrphans: orphans.length,
+		staleNotes,
+		topLinked,
 	};
 }
 
@@ -99,15 +143,25 @@ export const ReactView = ({ app }: { app: App }) => {
 		<div style={{ padding: '1rem' }}>
 			<h2>Vault Analytics</h2>
 			<ul>
-				<li><strong>Files:</strong> {data.totalFiles}</li>
-				<li><strong>Folders:</strong> {data.totalFolders}</li>
-				<li><strong>Attachments:</strong> {data.totalAttachments}</li>
-				<li><strong>Tags:</strong> {data.totalTags}</li>
+				<li>
+					<strong>Files:</strong> {data.totalFiles}
+				</li>
+				<li>
+					<strong>Folders:</strong> {data.totalFolders}
+				</li>
+				<li>
+					<strong>Attachments:</strong> {data.totalAttachments}
+				</li>
+				<li>
+					<strong>Tags:</strong> {data.totalTags}
+				</li>
 			</ul>
 			<h3>File types</h3>
 			<ul>
 				{Object.entries(data.fileTypes).map(([ext, count]) => (
-					<li key={ext}><strong>{ext}</strong>: {count}</li>
+					<li key={ext}>
+						<strong>{ext}</strong>: {count}
+					</li>
 				))}
 			</ul>
 			<h3>Orphan notes ({data.totalOrphans})</h3>
@@ -130,6 +184,50 @@ export const ReactView = ({ app }: { app: App }) => {
 					))}
 				</ul>
 			)}
+			<h3>Most linked notes</h3>
+			{data.topLinked.length === 0 ? (
+				<p>No data yet.</p>
+			) : (
+				<ol>
+					{data.topLinked.map((f) => (
+						<li key={f.path}>
+							<a
+								href="#"
+								onClick={(e) => {
+									e.preventDefault();
+									void openFile(app, f.path);
+								}}
+							>
+								{f.name}
+							</a>
+							{' — '}
+							{f.count} backlinks
+						</li>
+					))}
+				</ol>
+			)}
+			<h3>Stale notes</h3>
+			{data.staleNotes.length === 0 ? (
+				<p>No stale notes.</p>
+			) : (
+				<ol>
+					{data.staleNotes.map((f) => (
+						<li key={f.path}>
+							<a
+								href="#"
+								onClick={(e) => {
+									e.preventDefault();
+									void openFile(app, f.path);
+								}}
+							>
+								{f.name}
+							</a>
+							{' — '}
+							{f.days}d untouched
+						</li>
+					))}
+				</ol>
+			)}
 			<h3>Recently modified</h3>
 			<ol>
 				{data.recentFiles.map((f) => (
@@ -143,7 +241,8 @@ export const ReactView = ({ app }: { app: App }) => {
 						>
 							{f.name}
 						</a>
-						{' — '}{new Date(f.mtime).toLocaleDateString()}
+						{' — '}
+						{new Date(f.mtime).toLocaleDateString()}
 					</li>
 				))}
 			</ol>
