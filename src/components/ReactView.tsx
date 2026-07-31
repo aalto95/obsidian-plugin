@@ -10,6 +10,8 @@ interface VaultAnalytics {
 	totalTags: number;
 	orphanNotes: { name: string; path: string }[];
 	totalOrphans: number;
+	taglessNotes: { name: string; path: string }[];
+	totalTagless: number;
 	shortNotes: { name: string; path: string; words: number }[];
 	topLinked: { name: string; path: string; count: number }[];
 }
@@ -25,11 +27,14 @@ function getAnalytics(app: App): VaultAnalytics {
 		(f) => !f.path.startsWith('Archives/'),
 	);
 	const tagSet = new Set<string>();
+	const filesWithTags = new Set<string>();
 	for (const f of markdownFiles) {
 		const cache = app.metadataCache.getFileCache(f);
+		let hasTags = false;
 		if (cache?.tags) {
 			for (const t of cache.tags) {
 				tagSet.add(t.tag);
+				hasTags = true;
 			}
 		}
 		const fm = cache?.frontmatter;
@@ -37,9 +42,15 @@ function getAnalytics(app: App): VaultAnalytics {
 			const tags = Array.isArray(fm.tags) ? fm.tags : [fm.tags];
 			for (const t of tags) {
 				tagSet.add(`#${t}`);
+				hasTags = true;
 			}
 		}
+		if (hasTags) filesWithTags.add(f.path);
 	}
+
+	const taglessNotes = markdownFiles.filter(
+		(f) => !filesWithTags.has(f.path),
+	);
 
 	const backlinkCounts = new Map<string, number>();
 	const accumulateBacklinks = (targets: Record<string, number>) => {
@@ -106,6 +117,11 @@ function getAnalytics(app: App): VaultAnalytics {
 			path: f.path,
 		})),
 		totalOrphans: orphans.length,
+		taglessNotes: taglessNotes.slice(0, 10).map((f) => ({
+			name: f.name,
+			path: f.path,
+		})),
+		totalTagless: taglessNotes.length,
 		shortNotes,
 		topLinked,
 	};
@@ -166,6 +182,26 @@ export const ReactView = ({ app }: { app: App }) => {
 			) : (
 				<ul>
 					{data.orphanNotes.map((f) => (
+						<li key={f.path}>
+							<a
+								href="#"
+								onClick={(e) => {
+									e.preventDefault();
+									void openFile(app, f.path);
+								}}
+							>
+								{f.name}
+							</a>
+						</li>
+					))}
+				</ul>
+			)}
+			<h3>Tagless notes ({data.totalTagless})</h3>
+			{data.taglessNotes.length === 0 ? (
+				<p>No tagless notes — every note has tags!</p>
+			) : (
+				<ul>
+					{data.taglessNotes.map((f) => (
 						<li key={f.path}>
 							<a
 								href="#"
