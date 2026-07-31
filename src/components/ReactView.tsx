@@ -41,18 +41,22 @@ function getAnalytics(app: App): VaultAnalytics {
 		}
 	}
 
-	const orphans = markdownFiles.filter((f) => {
-		const cache = app.metadataCache as unknown as {
-			getBacklinksForFile(file: TFile): {
-				resolved: Record<string, unknown>;
-				unresolved: Record<string, unknown>;
-			};
-		};
-		const backlinks = cache.getBacklinksForFile(f);
-		const resolved = Object.keys(backlinks?.resolved ?? {}).length;
-		const unresolved = Object.keys(backlinks?.unresolved ?? {}).length;
-		return resolved + unresolved === 0;
-	});
+	const backlinkCounts = new Map<string, number>();
+	const accumulateBacklinks = (targets: Record<string, number>) => {
+		for (const target of Object.keys(targets)) {
+			backlinkCounts.set(target, (backlinkCounts.get(target) ?? 0) + 1);
+		}
+	};
+	for (const targets of Object.values(app.metadataCache.resolvedLinks)) {
+		accumulateBacklinks(targets);
+	}
+	for (const targets of Object.values(app.metadataCache.unresolvedLinks)) {
+		accumulateBacklinks(targets);
+	}
+
+	const orphans = markdownFiles.filter(
+		(f) => (backlinkCounts.get(f.path) ?? 0) === 0,
+	);
 
 	const SHORT_NOTE_BYTES = 300;
 	const shortNotes = markdownFiles
@@ -65,21 +69,8 @@ function getAnalytics(app: App): VaultAnalytics {
 			words: Math.round(f.stat.size / 6),
 		}));
 
-	const backlinkCounts: { path: string; count: number }[] = [];
-	for (const f of markdownFiles) {
-		const cache = app.metadataCache as unknown as {
-			getBacklinksForFile(file: TFile): {
-				resolved: Record<string, unknown>;
-				unresolved: Record<string, unknown>;
-			};
-		};
-		const bl = cache.getBacklinksForFile(f);
-		const count =
-			Object.keys(bl?.resolved ?? {}).length +
-			Object.keys(bl?.unresolved ?? {}).length;
-		backlinkCounts.push({ path: f.path, count });
-	}
-	const topLinked = backlinkCounts
+	const topLinked = markdownFiles
+		.map((f) => ({ path: f.path, count: backlinkCounts.get(f.path) ?? 0 }))
 		.sort((a, b) => b.count - a.count)
 		.slice(0, 5)
 		.map(({ path, count }) => ({
@@ -133,7 +124,13 @@ export const ReactView = ({ app }: { app: App }) => {
 	useEffect(() => {
 		setData(getAnalytics(app));
 		const ref = app.vault.on('modify', () => setData(getAnalytics(app)));
-		return () => app.vault.offref(ref);
+		const ref2 = app.metadataCache.on('resolved', () =>
+			setData(getAnalytics(app)),
+		);
+		return () => {
+			app.vault.offref(ref);
+			app.metadataCache.offref(ref2);
+		};
 	}, [app]);
 
 	if (!data) return null;
